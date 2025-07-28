@@ -8,15 +8,18 @@ import py7zr
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Literal
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.tokenize import word_tokenize
-from datasets import load_dataset, Dataset
+from datasets import load_dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from peft import PeftModel
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
+
 nltk.download("punkt")
 
 app = FastAPI()
@@ -147,6 +150,14 @@ def search(request: SearchRequest):
         "time": round(end - start, 2),
         "perplexity": round(perplexity, 2)
     }
+
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return FileResponse("static/index.html")
 
 
 if __name__ == '__main__':

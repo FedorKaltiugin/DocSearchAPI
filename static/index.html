@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RAG Search</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.6;
+      background-color: var(--bg, #fff);
+      color: var(--fg, #000);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 1em;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 20px;
+    }
+
+    textarea, select, input[type=number] {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    button {
+      display: block;
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1em;
+      background-color: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #005fa3;
+    }
+
+    pre {
+      background: #f8f8f8;
+      padding: 15px;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .error {
+      color: #b00020;
+      margin-top: 10px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        --bg: #121212;
+        --fg: #eee;
+      }
+
+      textarea, select, input[type=number] {
+        background-color: #1e1e1e;
+        color: #fff;
+        border: 1px solid #444;
+      }
+
+      pre {
+        background: #1e1e1e;
+      }
+
+      button {
+        background-color: #1a73e8;
+      }
+
+      button:hover {
+        background-color: #135fd1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 RAG Search Demo</h1>
+
+  <label for="query">Enter your question:</label>
+  <textarea id="query" placeholder="Who was Abraham Lincoln?"></textarea>
+
+  <label for="method">Choose search method:</label>
+  <select id="method">
+    <option value="hybrid">Hybrid</option>
+    <option value="bm25">BM25</option>
+    <option value="bert">BERT</option>
+  </select>
+
+  <label for="top_n">Number of relevant documents:</label>
+  <input type="number" id="top_n" value="5" min="1" max="20" />
+
+  <button id="ask-btn" onclick="ask()">Search</button>
+
+  <h2>Answer</h2>
+  <pre id="result">--</pre>
+
+  <p id="error" class="error"></p>
+
+  <script>
+    async function ask() {
+      const btn = document.getElementById('ask-btn');
+      const query = document.getElementById('query').value.trim();
+      const method = document.getElementById('method').value;
+      const top_n = Number(document.getElementById('top_n').value) || 5;
+
+      const resultEl = document.getElementById('result');
+      const errorEl = document.getElementById('error');
+
+      errorEl.textContent = '';
+      resultEl.textContent = 'Loading...';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch('/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, method, top_n })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        resultEl.textContent =
+          `Answer: ${data.answer}\n\nTime: ${data.time ?? data.execution_time} s\nPerplexity: ${data.perplexity}`;
+
+      } catch (e) {
+        console.error(e);
+        errorEl.textContent = `Request failed: ${e.message}`;
+        resultEl.textContent = '--';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

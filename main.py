@@ -101,61 +101,51 @@ def hybrid_search(query, dataset, embeddings, top_n=5):
     return sorted(merged, key=lambda x: -x['score'])[:top_n]
 
 
-def compute_perplexity(results, model, tokenizer):
-    total_loss = 0
-    total_tokens = 0
-    for sample in results:
-        input_text = f'Answer the question: {sample["question"]}'
-        answer_text = sample['answer']
-
-        inputs = tokenizer(input_text, return_tensors='pt', truncation=True, padding='max_length', max_length=128)
-        targets = tokenizer(text_target=[answer_text], return_tensors='pt', truncation=True, padding='max_length',
-                            max_length=32)
-
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
-        labels = targets['input_ids']
-        labels[labels == tokenizer.pad_token_id] = -100
-
-        with torch.no_grad():
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
-
-        num_tokens = (labels != -100).sum().item()
-        total_loss += loss.item() * num_tokens
-        total_tokens += num_tokens
-
-    avg_loss = total_loss / total_tokens
-    return round(math.exp(avg_loss), 4)
-
-
 class SearchRequest(BaseModel):
     query: str
-    method: Literal["bm25", "bert", "hybrid"]
+    method: Literal["bm25", "bert", "hybrid"] = "hybrid"
     top_n: int = 5
 
 
+def generate_llm_answer(query, results):
+    context = "\n".join([f"Q: {r['question']} A: {r['answer']}" for r in results])
+    prompt = f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, padding=True).to(model.device)
+    with torch.no_grad():
+        outputs = model.generate(**inputs, max_length=100)
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+
+def compute_perplexity(query: str, context: str, answer: str) -> float:
+    prompt = f"{context}\n\nQuestion: {query}\nAnswer: {answer}"
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, padding=True).to(model.device)
+    with torch.no_grad():
+        outputs = model(**inputs, labels=inputs["input_ids"])
+    loss = outputs.loss.item()
+    return math.exp(loss)
+
+
 @app.post('/search')
-def search(req: SearchRequest):
+def search(request: SearchRequest):
     start = time.time()
 
-    if req.method == 'bm25':
-        results = bm25_search(req.query, dataset, req.top_n)
-    elif req.method == 'bert':
-        results = bert_search(req.query, dataset, embeddings, req.top_n)
+    if request.method == "bm25":
+        results = bm25_search(request.query, dataset, request.top_n)
+    elif request.method == "bert":
+        results = bert_search(request.query, dataset, embeddings, request.top_n)
     else:
-        results = hybrid_search(req.query, dataset, embeddings, req.top_n)
+        results = hybrid_search(request.query, dataset, embeddings, request.top_n)
 
-    perplexity = compute_perplexity(results, model, tokenizer)
-    elapsed = round(time.time() - start, 4)
+    answer = generate_llm_answer(request.query, results)
+    context = "\n".join([f"Q: {r['question']} A: {r['answer']}" for r in results])
+    perplexity = compute_perplexity(request.query, context, answer)
+    end = time.time()
 
     return {
-        'query': req.query,
-        'method': req.method,
-        'top_n': req.top_n,
-        'time_seconds': elapsed,
-        'perplexity': perplexity,
-        'results': results
+        "answer": answer,
+        "time": round(end - start, 2),
+        "perplexity": round(perplexity, 2)
     }
 
 

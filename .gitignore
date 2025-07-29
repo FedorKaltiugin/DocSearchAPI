@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 env/
 venv/
+logs/
 .vscode/
 .idea/
 *.pt
@@ -18,9 +19,7 @@ venv/
 *.tar.gz
 *.h5
 *.ckpt
-models/
-data/
-logs/
 .DS_Store
 Thumbs.db
 .env
+main_old.py
